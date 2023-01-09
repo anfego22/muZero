@@ -1,9 +1,9 @@
 from typing import Union
 import torch
 import torch.nn as nn
+from math import prod
 
 
-# TODO: Deal with stride != 1?
 class BasicBlock(nn.Module):
     def __init__(self, channel: int, stride: int = 1):
         """Basic block with skip connection."""
@@ -46,3 +46,55 @@ class DownSample(nn.Module):
     def forward(self, x: torch.Tensor):
         out = self.layer(x)
         return out
+
+
+class Representation(nn.Module):
+    def __init__(self, chann: int, outDownSample: list):
+        super().__init__()
+        self.down = DownSample(chann, outDownSample)
+
+    def forward(self, x):
+        out = self.down(x)
+        return out
+
+
+class Dynamics(nn.Module):
+    def __init__(self, inpDim: list, linOut: list = [1]):
+        super().__init__()
+        channel = inpDim[0]
+        linOut += [1]
+        initDim = prod([inpDim[0] - 1] + inpDim[1:])
+        layer = [BasicBlock(channel) for _ in range(2)]
+        layer += [nn.Conv2d(channel, channel - 1, 3, stride=1, padding=1)]
+        self.layer = nn.Sequential(*layer)
+        linear = []
+        for out in linOut:
+            linear += [nn.Linear(initDim, out), nn.Sigmoid(), nn.Dropout(.3)]
+            initDim = out
+        self.dense = nn.Sequential(*linear)
+
+    def forward(self, x):
+        h = self.layer(x)
+        h1 = nn.Flatten(1)(h)
+        r = self.dense(h1)
+        return h, r
+
+
+class Prediction(nn.Module):
+    def __init__(self, inpDim: list, linOut: list[int]):
+        super().__init__()
+        channel = inpDim[0]
+        initDim = prod(inpDim)
+        layer = [BasicBlock(channel) for _ in range(2)]
+        layer += [nn.Flatten(1)]
+        if len(linOut) > 1:
+            for out in linOut[:-1]:
+                layer += [nn.Linear(initDim, out)]
+                initDim = out
+        self.layer = nn.Sequential(*layer)
+        self.outLayer = [nn.Linear(initDim, linOut[-1]), nn.Linear(initDim, 1)]
+
+    def forward(self, x) -> tuple:
+        out = self.layer(x)
+        policy, val = [layer(out) for layer in self.outLayer]
+        return policy, val
