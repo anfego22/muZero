@@ -7,7 +7,10 @@ config = {
     "representation_outputs": [9, 4, 1],
     "dynamic_hidden_size": [16, 8],
     "prediction_hidden_size": [],
-    "action_space": 3
+    "action_space": 3,
+    "mcts_discount_value": 0.8,
+    "pUCT_score_c1": 1.25,
+    "pUCT_score_c2": 19652,
 }
 
 # TODO: Make it work with high and width that are multiple of two.
