@@ -1,60 +1,8 @@
 import torch
-import torch.nn as nn
-from models import BasicBlock, DownSample
-from typing import Union
-from math import prod
-
-
-class Representation(nn.Module):
-    def __init__(self, chann: int, outDownSample: list):
-        super().__init__()
-        self.down = DownSample(chann, outDownSample)
-
-    def forward(self, x):
-        out = self.down(x)
-        return out
-
-
-class Dynamics(nn.Module):
-    def __init__(self, inpDim: list, linOut: list = [1]):
-        super().__init__()
-        channel = inpDim[0]
-        linOut += [1]
-        initDim = prod([inpDim[0] - 1] + inpDim[1:])
-        layer = [BasicBlock(channel) for _ in range(2)]
-        layer += [nn.Conv2d(channel, channel - 1, 3, stride=1, padding=1)]
-        self.layer = nn.Sequential(*layer)
-        linear = []
-        for out in linOut:
-            linear += [nn.Linear(initDim, out), nn.Sigmoid(), nn.Dropout(.3)]
-            initDim = out
-        self.dense = nn.Sequential(*linear)
-
-    def forward(self, x):
-        h = self.layer(x)
-        h1 = nn.Flatten(1)(h)
-        r = self.dense(h1)
-        return h, r
-
-
-class Prediction(nn.Module):
-    def __init__(self, inpDim: list, linOut: list[int]):
-        super().__init__()
-        channel = inpDim[0]
-        initDim = prod(inpDim)
-        layer = [BasicBlock(channel) for _ in range(2)]
-        layer += [nn.Flatten(1)]
-        if len(linOut) > 1:
-            for out in linOut[:-1]:
-                layer += [nn.Linear(initDim, out)]
-                initDim = out
-        self.layer = nn.Sequential(*layer)
-        self.outLayer = [nn.Linear(initDim, linOut[-1]), nn.Linear(initDim, 1)]
-
-    def forward(self, x) -> tuple:
-        out = self.layer(x)
-        policy, val = [layer(out) for layer in self.outLayer]
-        return policy, val
+from models import Representation, Dynamics, Prediction
+import utils as ut
+from numpy.random import choice
+from math import log, sqrt
 
 
 class Muzero():
@@ -76,3 +24,66 @@ class Muzero():
                         [-1], self.dynInp[1], self.dynInp[2]]
         self.f = Prediction(
             self.predInp, config["prediction_hidden_size"] + [config["action_space"]])
+
+    def dynamics_net(self, obs: torch.Tensor, act: int):
+        act = ut.action_to_plane(act, dim=self.dynInp[1:])
+        dynInp = torch.cat([obs, act], 1)
+        return self.g(dynInp)
+
+    def puct_score(self, parent: ut.Node, node: ut.Node):
+        result = self.config["pUCT_score_c1"] + log(
+            (parent.countVisits + self.config["pUCT_score_c2"] + 1) / self.config["pUCT_score_c2"])
+        result *= node.prob*sqrt(parent.countVisits) / (1 + node.countVisits)
+        result += node.get_value()
+        return result
+
+    def select_action(self, parent: ut.Node) -> tuple[int, ut.Node]:
+        maxScore = -float("inf")
+        for i, n in parent.children:
+            score = self.puct_score(parent, n)
+            if score > maxScore:
+                res = (i, n)
+        return res
+
+    def mcst(self, obs: dict, nSimul: int = 50) -> float:
+        """Run a monte carlo search tree.
+
+        obs:    Current observation.
+        nSimul: Number of times to run the MCST.
+
+        Return
+
+        Root node values.
+        """
+        root = ut.Node(0)
+        root.hiddenState = self.h(obs)
+        root.countVisits += 1
+        probs, _ = self.f(root.hiddenState)
+        for i, p in enumerate(probs):
+            root.children[i] = ut.Node(p)
+
+        for _ in range(nSimul):
+            history = [root]
+            node = history[0]
+            # While node is expanded, traverse the tree until reach a leaf node and expanded.
+
+            while len(node.children) > 0:
+                act, node = self.select_action(node)
+                history.append(node)
+
+            parent = history[-2]
+            node.hiddenState, node.reward = self.dynamics_net(
+                parent.hiddenState, act)
+            probs, value = self.f(node.hiddenState)
+
+            for i, p in enumerate(probs):
+                node.children[i] = ut.Node(p)
+
+            for n in reversed(history):
+                n.countVisits += 1
+                n.totalValue += value
+                value = n.reward + self.config["mcts_discount_value"]*value
+
+        policy = [n.countVisits /
+                  root.countVisits for n in root.children.values()]
+        return policy, root.get_value()
