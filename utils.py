@@ -1,10 +1,17 @@
 import torch
 import torch.nn.functional as F
 from math import prod, log, sqrt
+from typing import Union
 
 
-def action_to_plane(act: int, dim: list = [60, 60]):
-    return F.one_hot(act, prod(dim)).view(dim)[None, 1]
+def action_to_plane(act: Union[int, list[int]], dim: list = [60, 60]):
+    if type(act) is list:
+        res = torch.stack(
+            [F.one_hot(torch.LongTensor([a]), prod(dim)).view(dim)
+             for a in act]
+        )
+        return res
+    return F.one_hot(torch.LongTensor([act]), prod(dim)).view(dim)[None, :]
 
 
 class Node(object):
@@ -19,3 +26,4 @@ class Node(object):
     def get_value(self):
         if self.countVisits != 0:
             return self.totalValue / self.countVisits
+        return 0
