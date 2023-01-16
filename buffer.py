@@ -12,10 +12,12 @@ class ReplayBuffer(object):
         """Save one step of the game.
 
         step: A dictionary with keys:
-                obs: The state of the game
-                act: The action taken
-                rew: THe reward received
-        game: The number of the game played.
+                obs: Current game state
+                act: Action taken. Int
+                rew: Current reward received. Float
+                pol: Current policy (torch.Tensor (1, actionSpace))
+                val: Current estimated value for state. Float
+        game: The index the game played.
         """
         if game in self.history:
             self.history[game].append(step)
@@ -42,7 +44,9 @@ class ReplayBuffer(object):
         for s in range(steps + 1):
             batch.append({
                 "obs": torch.stack([selGame[p+s]["obs"] for p in pos]),
-                "act": torch.stack([selGame[p+s]["act"] for p in pos]),
-                "rew": torch.stack([selGame[p+s]["rew"] for p in pos]),
+                "act": [selGame[p+s]["act"] for p in pos],
+                "rew": torch.Tensor([selGame[p+s]["rew"] for p in pos]),
+                "pol": torch.stack([selGame[p+s]["policy"] for p in pos]),
+                "val": torch.Tensor([selGame[p+s]["value"] for p in pos]),
             })
         return batch

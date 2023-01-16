@@ -1,6 +1,7 @@
 from unittest.mock import patch
 from buffer import ReplayBuffer
 import torch
+import numpy as np
 
 
 def test_buffer_add():
@@ -31,8 +32,11 @@ def test_buffer_add2():
 def test_batch():
     rb = ReplayBuffer(2)
     for i in range(10):
-        step = {"obs": torch.Tensor(
-            [[i, 0], [i, 0]]), "act": torch.Tensor([0, 0, i]), "rew": torch.Tensor([i])}
+        step = {
+            "obs": torch.Tensor([[i, 0], [i, 0]]),
+            "act": i, "rew": i, "value": i,
+            "policy": torch.Tensor([[0, 0, i]])
+        }
         rb.add(step, 0)
     with patch('buffer.choice') as m:
         m.return_value = [0, 1, 6]
@@ -43,11 +47,7 @@ def test_batch():
         torch.Tensor([[6, 0], [6, 0]])
     ])
     assert torch.equal(res[0]["obs"], expectedObs0)
-    expectedAct3 = torch.stack([
-        torch.Tensor([0, 0, 2]),
-        torch.Tensor([0, 0, 3]),
-        torch.Tensor([0, 0, 8])
-    ])
-    assert torch.equal(res[2]["act"], expectedAct3)
-    expectedRew2 = torch.Tensor([[1], [2], [7]])
+    expectedAct3 = [2, 3, 8]
+    assert np.all(np.equal(res[2]["act"], expectedAct3))
+    expectedRew2 = torch.Tensor([1, 2, 7])
     assert torch.equal(res[1]["rew"], expectedRew2)
