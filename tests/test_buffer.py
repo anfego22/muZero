@@ -38,7 +38,7 @@ def test_batch():
             "policy": torch.Tensor([[0, 0, i]])
         }
         rb.add(step, 0)
-    with patch('buffer.choice') as m:
+    with patch('muzero.buffer.choice') as m:
         m.return_value = [0, 1, 6]
         res = rb.sample_batch(2, 3, 0)
     expectedObs0 = torch.stack([

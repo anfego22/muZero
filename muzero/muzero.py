@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from models import Representation, Dynamics, Prediction
+from muzero.models import Representation, Dynamics, Prediction
 import muzero.utils as ut
 from numpy.random import choice
 from math import log, sqrt
