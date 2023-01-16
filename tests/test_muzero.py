@@ -1,6 +1,6 @@
-from muzero import Muzero
+from muzero.muzero import Muzero
 import torch
-import utils as ut
+import muzero.utils as ut
 
 config = {
     "observation_dim": [3, 64, 64],

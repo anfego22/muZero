@@ -1,4 +1,4 @@
-import utils as ut
+import muzero.utils as ut
 import torch
 
 

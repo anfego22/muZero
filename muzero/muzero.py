@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.optim import Adam
 from models import Representation, Dynamics, Prediction
-import utils as ut
+import muzero.utils as ut
 from numpy.random import choice
 from math import log, sqrt
 from typing import Union

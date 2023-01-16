@@ -1,4 +1,4 @@
-from models import BasicBlock, DownSample
+from muzero.models import BasicBlock, DownSample
 import torch
 
 

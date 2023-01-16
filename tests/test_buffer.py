@@ -1,5 +1,5 @@
 from unittest.mock import patch
-from buffer import ReplayBuffer
+from muzero.buffer import ReplayBuffer
 import torch
 import numpy as np
 
