@@ -7,7 +7,7 @@ from typing import Union
 def action_to_plane(act: Union[int, list[int]], dim: list = [60, 60]):
     if type(act) is list:
         res = torch.stack(
-            [F.one_hot(torch.LongTensor([a]), prod(dim)).view(dim)
+            [F.one_hot(torch.LongTensor([a]), prod(dim)).view(dim)[None, :]
              for a in act]
         )
         return res

@@ -9,8 +9,7 @@ def test_action_to_plane():
 
 def test_action_to_plane2():
     res = ut.action_to_plane([1, 2], [2, 2])
-    expe = torch.Tensor([
-        [[0., 1.], [0., 0.]],
-        [[0., 0.], [1., 0.]]
-    ])
+    a = torch.Tensor([[0., 1.], [0., 0.]])[None, :]
+    b = torch.Tensor([[0., 0.], [1., 0.]])[None, :]
+    expe = torch.stack([a, b])
     assert torch.equal(res, expe)
