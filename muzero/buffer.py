@@ -3,7 +3,7 @@ from numpy.random import choice
 
 
 class ReplayBuffer(object):
-    def __init__(self, maxGames: int = 10):
+    def __init__(self, tdStep: int, maxGames: int = 10):
         """This class store all information relevant to replay a game."""
         self.history = {}
         self.maxGames = maxGames

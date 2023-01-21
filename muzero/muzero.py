@@ -30,10 +30,11 @@ class Muzero(nn.Module):
             self.predInp, config["prediction_hidden_size"] + [config["action_space"]])
         self.optimizer = Adam(self.parameters(
         ),  lr=config["adam_lr"], weight_decay=config["adam_weight_decay"])
+        self.mcts_simulations = config["mcts_simulations"]
         self.eval()
 
     def dynamics_net(self, obs: torch.Tensor, act: Union[int, list[int]]):
-        act = ut.action_to_plane(act, dim=self.dynInp[1:])
+        act = ut.action_to_plane(act, dim=self.dynInp[1:])[None, :]
         dynInp = torch.cat([obs, act], 1)
         return self.g(dynInp)
 
@@ -47,13 +48,14 @@ class Muzero(nn.Module):
 
     def select_action(self, parent: ut.Node) -> tuple[int, ut.Node]:
         maxScore = -float("inf")
-        for i, n in parent.children:
+        for i, n in parent.children.items():
             score = self.puct_score(parent, n)
             if score > maxScore:
+                maxScore = score
                 res = (i, n)
         return res
 
-    def mcst(self, obs: dict, nSimul: int = 50) -> float:
+    def mcst(self, obs: dict, nSimul: int = 50) -> tuple[torch.Tensor, float]:
         """Run a monte carlo search tree.
 
         obs:    Current observation.
@@ -66,11 +68,12 @@ class Muzero(nn.Module):
         with torch.no_grad():
             root = ut.Node(0)
             root.hiddenState = self.h(obs)
+            root.countVisits += 1
             probs, _ = self.f(root.hiddenState)
-            for i, p in enumerate(probs):
+            for i, p in enumerate(probs[0]):
                 root.children[i] = ut.Node(p)
 
-            for _ in range(nSimul):
+            for j in range(nSimul):
                 history = [root]
                 node = history[0]
                 # While node is expanded, traverse the tree until reach a leaf node and expanded.
@@ -80,11 +83,13 @@ class Muzero(nn.Module):
                     history.append(node)
 
                 parent = history[-2]
-                node.hiddenState, node.reward = self.dynamics_net(
+                node.hiddenState, reward = self.dynamics_net(
                     parent.hiddenState, act)
+                node.reward = float(reward)
                 probs, value = self.f(node.hiddenState)
+                value = float(value)
 
-                for i, p in enumerate(probs):
+                for i, p in enumerate(probs[0]):
                     node.children[i] = ut.Node(p)
 
                 for n in reversed(history):
@@ -121,3 +126,10 @@ class Muzero(nn.Module):
         totalLoss.backward()
         self.optimizer.step()
         self.eval()
+
+    def act(self, obs: torch.Tensor, nSimul: int = None) -> dict:
+        """Act according to policy."""
+        if nSimul is None:
+            nSimul = self.mcts_simulations
+        policy, val = self.mcst(obs, nSimul)
+        return {"pol": policy, "val": val}
