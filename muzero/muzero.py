@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.optim import Adam
 from muzero.models import Representation, Dynamics, Prediction
 import muzero.utils as ut
-from numpy.random import choice
+from numpy.random import choice, uniform
 from math import log, sqrt
 from typing import Union
 
@@ -99,7 +99,7 @@ class Muzero(nn.Module):
 
             policy = [n.countVisits for n in root.children.values()]
             norm = sum(policy)
-            policy = [p / norm for p in policy]
+            policy = torch.Tensor([p / norm for p in policy])
             return policy, root.get_value()
 
     def train_batch(self, batch: dict) -> None:
@@ -132,4 +132,9 @@ class Muzero(nn.Module):
         if nSimul is None:
             nSimul = self.mcts_simulations
         policy, val = self.mcst(obs, nSimul)
-        return {"pol": policy, "val": val}
+        act = [i for i, v in enumerate(policy) if v == max(policy)][0]
+        if uniform() < self.config["random_action_threshold"]:
+            act = choice(self.config["action_space"])
+            # If action was taken by random, policy should be modify?
+            # policy = [1/self.config["action_space"]]*self.config["action_space"]
+        return {"pol": policy, "val": val, "act": act}
