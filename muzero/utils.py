@@ -4,14 +4,14 @@ from math import prod, log, sqrt
 from typing import Union
 
 
-def action_to_plane(act: Union[int, list[int]], dim: list = [60, 60]):
-    if type(act) is list:
-        res = torch.stack(
-            [F.one_hot(torch.LongTensor([a]), prod(dim)).view(dim)[None, :]
-             for a in act]
-        )
-        return res
-    return F.one_hot(torch.LongTensor([act]), prod(dim)).view(dim)[None, :]
+def action_to_plane(act: Union[int, list[int]], dim: list = [1, 60, 60]):
+    if type(act) != list:
+        act = [act]
+    res = torch.stack(
+        [F.one_hot(torch.LongTensor([a]), prod(dim)).view(dim)
+            for a in act]
+    )
+    return res
 
 
 class Node(object):

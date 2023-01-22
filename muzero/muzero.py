@@ -34,7 +34,7 @@ class Muzero(nn.Module):
         self.eval()
 
     def dynamics_net(self, obs: torch.Tensor, act: Union[int, list[int]]):
-        act = ut.action_to_plane(act, dim=self.dynInp[1:])[None, :]
+        act = ut.action_to_plane(act, dim=[1] + self.dynInp[1:])
         dynInp = torch.cat([obs, act], 1)
         return self.g(dynInp)
 

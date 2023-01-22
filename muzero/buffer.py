@@ -44,7 +44,7 @@ class ReplayBuffer(object):
         batch = []
         for s in range(steps + 1):
             batch.append({
-                "obs": torch.stack([selGame[p+s]["obs"] for p in pos]),
+                "obs": torch.concat([selGame[p+s]["obs"] for p in pos], 0),
                 "act": [selGame[p+s]["act"] for p in pos],
                 "rew": torch.Tensor([selGame[p+s-1]["rew"] for p in pos]),
                 "pol": torch.stack([selGame[p+s]["pol"] for p in pos]),
