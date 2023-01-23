@@ -40,7 +40,7 @@ class ReplayBuffer(object):
         if game is None:
             g = choice(list(self.history.keys()))
         selGame = self.history[g]
-        pos = choice(len(selGame) - steps, batchSize) + 1
+        pos = choice(len(selGame) - steps - 1, batchSize) + 1
         batch = []
         for s in range(steps + 1):
             batch.append({

@@ -126,6 +126,7 @@ class Muzero(nn.Module):
         totalLoss.backward()
         self.optimizer.step()
         self.eval()
+        return totalLoss
 
     def act(self, obs: torch.Tensor, nSimul: int = None) -> dict:
         """Act according to policy."""
