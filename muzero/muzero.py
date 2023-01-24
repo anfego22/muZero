@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.optim import Adam
 from muzero.models import Representation, Dynamics, Prediction
 import muzero.utils as ut
-from numpy.random import choice, uniform
+from numpy.random import choice, uniform, dirichlet
 from math import log, sqrt
 from typing import Union
 
@@ -39,7 +39,7 @@ class Muzero(nn.Module):
         return self.g(dynInp)
 
     def puct_score(self, parent: ut.Node, node: ut.Node):
-        visits = sum([n.countVisits for n in parent.children.values()])
+        visits = parent.countVisits
         result = self.config["pUCT_score_c1"] + log(
             (visits + self.config["pUCT_score_c2"] + 1) / self.config["pUCT_score_c2"])
         result *= node.prob*sqrt(visits) / (1 + node.countVisits)
@@ -70,8 +70,11 @@ class Muzero(nn.Module):
             root.hiddenState = self.h(obs)
             root.countVisits += 1
             probs, _ = self.f(root.hiddenState)
-            for i, p in enumerate(probs[0]):
-                root.children[i] = ut.Node(p)
+            noise = dirichlet(
+                [self.config["root_dirichlet_alpha"]] * self.config["action_space"])
+            frac = self.config["mcts_root_exploration"]
+            for i, (n, p) in enumerate(zip(noise, probs[0])):
+                root.children[i] = ut.Node(p*(1-frac) + n*frac)
 
             for j in range(nSimul):
                 history = [root]

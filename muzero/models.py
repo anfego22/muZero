@@ -69,7 +69,7 @@ class Dynamics(nn.Module):
         self.layer = nn.Sequential(*layer)
         linear = []
         for out in linOut:
-            linear += [nn.Linear(initDim, out), nn.Sigmoid(), nn.Dropout(.3)]
+            linear += [nn.Linear(initDim, out), nn.ReLU(), nn.Dropout(.3)]
             initDim = out
         self.dense = nn.Sequential(*linear)
 
@@ -88,9 +88,9 @@ class Prediction(nn.Module):
         self.outAct = nn.Softmax(1)
         layer = [BasicBlock(channel) for _ in range(2)]
         layer += [nn.Flatten(1)]
-        if len(linOut) > 1:
+        if len(linOut) != 0:
             for out in linOut[:-1]:
-                layer += [nn.Linear(initDim, out)]
+                layer += [nn.Linear(initDim, out), nn.ReLU()]
                 initDim = out
         self.layer = nn.Sequential(*layer)
         self.outLayer = [nn.Linear(initDim, linOut[-1]), nn.Linear(initDim, 1)]
