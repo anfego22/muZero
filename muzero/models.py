@@ -85,6 +85,7 @@ class Prediction(nn.Module):
         super().__init__()
         channel = inpDim[0]
         initDim = prod(inpDim)
+        self.outAct = nn.Softmax(1)
         layer = [BasicBlock(channel) for _ in range(2)]
         layer += [nn.Flatten(1)]
         if len(linOut) > 1:
@@ -97,4 +98,4 @@ class Prediction(nn.Module):
     def forward(self, x) -> tuple:
         out = self.layer(x)
         policy, val = [layer(out) for layer in self.outLayer]
-        return policy, val
+        return self.outAct(policy), val

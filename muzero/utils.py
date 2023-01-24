@@ -8,7 +8,7 @@ def action_to_plane(act: Union[int, list[int]], dim: list = [1, 60, 60]):
     if type(act) != list:
         act = [act]
     res = torch.stack(
-        [F.one_hot(torch.LongTensor([a]), prod(dim)).view(dim)
+        [torch.Tensor([a/18.]*prod(dim)).view(dim)
             for a in act]
     )
     return res

@@ -76,11 +76,13 @@ class Muzero(nn.Module):
             for j in range(nSimul):
                 history = [root]
                 node = history[0]
+                depth = 0
                 # While node is expanded, traverse the tree until reach a leaf node and expanded.
 
-                while len(node.children) > 0:
+                while len(node.children) > 0 and depth < self.config["mcts_max_depth"]:
                     act, node = self.select_action(node)
                     history.append(node)
+                    depth += 1
 
                 parent = history[-2]
                 node.hiddenState, reward = self.dynamics_net(
@@ -115,18 +117,19 @@ class Muzero(nn.Module):
         """
         s = self.h(batch[0]["obs"])
         loss1, loss2 = nn.BCEWithLogitsLoss(), nn.MSELoss()
-        totalLoss = 0
+        policyLoss, valueLoss, rewardLoss = (0, 0, 0)
         for b in batch:
             s, r = self.dynamics_net(s, b["act"])
             p, v = self.f(s)
-            totalLoss += loss1(p, b["pol"])
-            totalLoss += loss2(v.squeeze(), b["val"])
-            totalLoss += loss2(r.squeeze(), b["rew"])
+            policyLoss += loss1(p, b["pol"])
+            valueLoss += loss2(v.squeeze(), b["val"])
+            rewardLoss += loss2(r.squeeze(), b["rew"])
+        totalLoss = policyLoss + valueLoss + rewardLoss
         self.optimizer.zero_grad()
         totalLoss.backward()
         self.optimizer.step()
         self.eval()
-        return totalLoss
+        return totalLoss, policyLoss, valueLoss, rewardLoss
 
     def act(self, obs: torch.Tensor, nSimul: int = None) -> dict:
         """Act according to policy."""
