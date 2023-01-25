@@ -1,5 +1,7 @@
+import numpy as np
 import torch
 from numpy.random import choice
+import muzero.utils as ut
 
 
 class ReplayBuffer(object):
@@ -29,7 +31,7 @@ class ReplayBuffer(object):
             k = list(self.history.keys()).pop(0)
             self.history.pop(k)
 
-    def sample_batch(self, steps: int, batchSize: int = 32, game: int = None) -> dict[str, torch.Tensor]:
+    def sample_batch(self, steps: int, batchSize: int = 32, game: int = None, prev_obs: int = 32) -> dict[str, torch.Tensor]:
         """Sample randomly a batch from a game.
 
         steps:     Number of steps to unroll the prediction.
@@ -40,11 +42,11 @@ class ReplayBuffer(object):
         if game is None:
             g = choice(list(self.history.keys()))
         selGame = self.history[g]
-        pos = choice(len(selGame) - steps - 1, batchSize)
+        pos = choice(len(selGame) - steps - prev_obs - 1, batchSize) + prev_obs
         batch = []
         for s in range(steps + 1):
             batch.append({
-                "obs": torch.concat([selGame[p+s]["obs"] for p in pos], 0),
+                "obs": torch.concat([self.make_obs(selGame, p+s) for p in pos], 0),
                 "act": [selGame[p+s]["act"] for p in pos],
                 "rew": torch.Tensor([selGame[p+s]["rew"] for p in pos]),
                 "pol": torch.stack([selGame[p+s]["pol"] for p in pos]),
@@ -60,3 +62,16 @@ class ReplayBuffer(object):
         for j, step in enumerate(game[pos:bix]):
             value += step["rew"]*self.discount**j
         return value
+
+    def make_obs(self, game: dict, pos: int, prev_obs: int = 32):
+        """Stack previous observations and actions."""
+        obsT = np.moveaxis(game[pos]["obs"], -1, 0) / 255.
+        res = torch.Tensor(obsT)
+        actShape = obsT.shape[1:]
+        for i in range(prev_obs):
+            if i != 0:
+                obsT = np.moveaxis(game[pos-i]["obs"], -1, 0) / 255.
+                res = torch.concat([res, torch.Tensor(obsT)], 0)
+            act = ut.action_to_plane(game[pos-i]["act"], actShape)
+            res = torch.concat([res, act], 0)
+        return res[None, :]

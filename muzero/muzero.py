@@ -139,7 +139,9 @@ class Muzero(nn.Module):
         if nSimul is None:
             nSimul = self.mcts_simulations
         policy, val = self.mcst(obs, nSimul)
-        act = [i for i, v in enumerate(policy) if v == max(policy)][0]
+        # act = [i for i, v in enumerate(policy) if v == max(policy)][0]
+        act = choice(self.config["action_space"],
+                     p=policy.numpy() / policy.numpy().sum())
         if uniform() < self.config["random_action_threshold"]:
             act = choice(self.config["action_space"])
             # If action was taken by random, policy should be modify?
