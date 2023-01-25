@@ -12,6 +12,7 @@ class Muzero(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
+        self.device = 'cuda'
         self.repInp = (config["observation_dim"][0] + 1) * \
             config["observation_history"]
         self.h = Representation(
@@ -28,6 +29,8 @@ class Muzero(nn.Module):
                         [-1], self.dynInp[1], self.dynInp[2]]
         self.f = Prediction(
             self.predInp, config["prediction_hidden_size"] + [config["action_space"]])
+        self.f.to(self.device)
+        self.to(self.device)
         self.optimizer = Adam(self.parameters(
         ),  lr=config["adam_lr"], weight_decay=config["adam_weight_decay"])
         self.mcts_simulations = config["mcts_simulations"]
@@ -35,7 +38,7 @@ class Muzero(nn.Module):
 
     def dynamics_net(self, obs: torch.Tensor, act: Union[int, list[int]]):
         act = ut.action_to_plane(act, dim=[1] + self.dynInp[1:])
-        dynInp = torch.cat([obs, act], 1)
+        dynInp = torch.cat([obs, act], 1).to(self.device)
         return self.g(dynInp)
 
     def puct_score(self, parent: ut.Node, node: ut.Node):

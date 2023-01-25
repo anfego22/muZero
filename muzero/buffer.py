@@ -11,6 +11,7 @@ class ReplayBuffer(object):
         self.tdStep = tdStep
         self.discount = 0.995
         self.maxGames = maxGames
+        self.device = 'cuda'
 
     def add(self, step: dict, game: int):
         """Save one step of the game.
@@ -46,11 +47,11 @@ class ReplayBuffer(object):
         batch = []
         for s in range(steps + 1):
             batch.append({
-                "obs": torch.concat([self.make_obs(selGame, p+s) for p in pos], 0),
+                "obs": torch.concat([self.make_obs(selGame, p+s) for p in pos], 0).to(self.device),
                 "act": [selGame[p+s]["act"] for p in pos],
-                "rew": torch.Tensor([selGame[p+s]["rew"] for p in pos]),
-                "pol": torch.stack([selGame[p+s]["pol"] for p in pos]),
-                "val": torch.Tensor([self.make_value(selGame, p + s) for p in pos])
+                "rew": torch.Tensor([selGame[p+s]["rew"] for p in pos]).to(self.device),
+                "pol": torch.stack([selGame[p+s]["pol"] for p in pos]).to(self.device),
+                "val": torch.Tensor([self.make_value(selGame, p + s) for p in pos]).to(self.device)
             })
         return batch
 
