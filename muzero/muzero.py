@@ -31,6 +31,7 @@ class Muzero(nn.Module):
         self.optimizer = Adam(self.parameters(
         ),  lr=config["adam_lr"], weight_decay=config["adam_weight_decay"])
         self.mcts_simulations = config["mcts_simulations"]
+        self.scaler = ut.MinMaxReward()
         self.eval()
 
     def dynamics_net(self, obs: torch.Tensor, act: Union[int, list[int]]):
@@ -39,12 +40,14 @@ class Muzero(nn.Module):
         return self.g(dynInp)
 
     def puct_score(self, parent: ut.Node, node: ut.Node):
-        visits = sum([c.countVisits for c in parent.children.values()])
-        result = self.config["pUCT_score_c1"] + log(
+        visits = parent.countVisits
+        pb_c = self.config["pUCT_score_c1"] + log(
             (visits + self.config["pUCT_score_c2"] + 1) / self.config["pUCT_score_c2"])
-        result *= node.prob*sqrt(visits) / (1 + node.countVisits)
-        result += node.get_value()
-        return result
+        pb_c *= node.prob*sqrt(visits) / (1 + node.countVisits)
+        value = node.get_value()
+        if node.countVisits > 0:
+            value = node.reward + self.scaler.normalize(value)
+        return pb_c + value
 
     def select_action(self, parent: ut.Node) -> tuple[int, ut.Node]:
         scores = [self.puct_score(parent, child)
@@ -97,6 +100,7 @@ class Muzero(nn.Module):
                 for n in reversed(history):
                     n.countVisits += 1
                     n.totalValue += value
+                    self.scaler.update_val(n.get_value())
                     value = n.reward + self.config["mcts_discount_value"]*value
 
             policy = [n.countVisits for n in root.children.values()]
