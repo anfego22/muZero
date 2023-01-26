@@ -39,7 +39,7 @@ class Muzero(nn.Module):
         return self.g(dynInp)
 
     def puct_score(self, parent: ut.Node, node: ut.Node):
-        visits = parent.countVisits
+        visits = sum([c.countVisits for c in parent.children.values()])
         result = self.config["pUCT_score_c1"] + log(
             (visits + self.config["pUCT_score_c2"] + 1) / self.config["pUCT_score_c2"])
         result *= node.prob*sqrt(visits) / (1 + node.countVisits)
@@ -47,13 +47,11 @@ class Muzero(nn.Module):
         return result
 
     def select_action(self, parent: ut.Node) -> tuple[int, ut.Node]:
-        maxScore = -float("inf")
-        for i, n in parent.children.items():
-            score = self.puct_score(parent, n)
-            if score > maxScore:
-                maxScore = score
-                res = (i, n)
-        return res
+        scores = [self.puct_score(parent, child)
+                  for child in parent.children.values()]
+        maxAct = [i for i, v in enumerate(scores) if v == max(scores)]
+        action = choice(maxAct)
+        return action, parent.children[action]
 
     def mcst(self, obs: dict, nSimul: int = 50) -> tuple[torch.Tensor, float]:
         """Run a monte carlo search tree.
@@ -68,7 +66,6 @@ class Muzero(nn.Module):
         with torch.no_grad():
             root = ut.Node(0)
             root.hiddenState = self.h(obs)
-            root.countVisits += 1
             probs, _ = self.f(root.hiddenState)
             noise = dirichlet(
                 [self.config["root_dirichlet_alpha"]] * self.config["action_space"])
