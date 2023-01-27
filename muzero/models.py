@@ -93,8 +93,8 @@ class Prediction(nn.Module):
                 layer += [nn.Linear(initDim, out), nn.ReLU()]
                 initDim = out
         self.layer = nn.Sequential(*layer)
-        self.outLayer = [nn.Sequential(
-            nn.Linear(initDim, linOut[-1]), outAct), nn.Linear(initDim, 1)]
+        self.outLayer = nn.ModuleList([nn.Sequential(
+            nn.Linear(initDim, linOut[-1]), outAct), nn.Linear(initDim, 1)])
 
     def forward(self, x) -> tuple:
         out = self.layer(x)

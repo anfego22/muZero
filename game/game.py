@@ -9,6 +9,7 @@ import pickle
 from datetime import datetime
 
 ROLLOUT_STEPS = 6
+DEVICE = 'cuda'
 
 MUZERO_DEFAULT = {
     "observation_dim": [3, 80, 80],
@@ -45,7 +46,7 @@ class Game(object):
         self.load_assets(buffer_size, td_steps)
         self.agent.config["random_action_threshold"] = random_action
         self.agent.config["mcts_root_exploration"] = root_noise
-        self.device = 'cpu'
+        self.device = DEVICE
 
     def make_image(self) -> torch.Tensor:
         """Convert a list of tuples into a 3D tensor.
@@ -109,7 +110,7 @@ class Game(object):
         end_t = datetime.now() - start_t
         print(f"game {gameId} finish at: {end_t.total_seconds()}")
         start_t = datetime.now()
-        with open("assets/history/" + self.buffer_file, "wb") as f:
+        with open("assets/" + self.buffer_file, "wb") as f:
             pickle.dump(self.buffer, f)
         end_t = datetime.now() - start_t
         print(f"Save game history at: {end_t.total_seconds()}")
@@ -119,7 +120,6 @@ class Game(object):
 
     def run(self, games):
         for g in range(games):
-
             self.play_game()
 
     def train_agent(self, epoch: int = 500):
@@ -130,5 +130,5 @@ class Game(object):
             if i != 0 and i % 10 == 0:
                 print(
                     f"Total loss: {loss} policy loss: {pL} reward loss {rL} value loss {vL} step: {i}")
-                with open("assets/agent/muzero", "wb") as f:
+                with open("assets/" + self.agent_file, "wb") as f:
                     pickle.dump(self.agent, f)
