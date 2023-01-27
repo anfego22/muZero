@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn.functional import cosine_similarity
 from torch.optim import Adam
 from muzero.models import Representation, Dynamics, Prediction
 import muzero.utils as ut
@@ -33,6 +34,7 @@ class Muzero(nn.Module):
         self.optimizer = Adam(self.parameters(
         ),  lr=config["adam_lr"], weight_decay=config["adam_weight_decay"])
         self.mcts_simulations = config["mcts_simulations"]
+        self.scaler = ut.MinMaxReward()
         self.eval()
 
     def dynamics_net(self, obs: torch.Tensor, act: Union[int, list[int]]):
@@ -43,20 +45,20 @@ class Muzero(nn.Module):
 
     def puct_score(self, parent: ut.Node, node: ut.Node):
         visits = parent.countVisits
-        result = self.config["pUCT_score_c1"] + log(
+        pb_c = self.config["pUCT_score_c1"] + log(
             (visits + self.config["pUCT_score_c2"] + 1) / self.config["pUCT_score_c2"])
-        result *= node.prob*sqrt(visits) / (1 + node.countVisits)
-        result += node.get_value()
-        return result
+        pb_c *= node.prob*sqrt(visits) / (1 + node.countVisits)
+        value = node.get_value()
+        if node.countVisits > 0:
+            value = node.reward + self.scaler.normalize(value)
+        return pb_c + value
 
     def select_action(self, parent: ut.Node) -> tuple[int, ut.Node]:
-        maxScore = -float("inf")
-        for i, n in parent.children.items():
-            score = self.puct_score(parent, n)
-            if score > maxScore:
-                maxScore = score
-                res = (i, n)
-        return res
+        scores = [self.puct_score(parent, child)
+                  for child in parent.children.values()]
+        maxAct = [i for i, v in enumerate(scores) if v == max(scores)]
+        action = choice(maxAct)
+        return action, parent.children[action]
 
     def mcst(self, obs: dict, nSimul: int = 50) -> tuple[torch.Tensor, float]:
         """Run a monte carlo search tree.
@@ -71,7 +73,6 @@ class Muzero(nn.Module):
         with torch.no_grad():
             root = ut.Node(0)
             root.hiddenState = self.h(obs)
-            root.countVisits += 1
             probs, _ = self.f(root.hiddenState)
             noise = dirichlet(
                 [self.config["root_dirichlet_alpha"]] * self.config["action_space"])
@@ -103,6 +104,7 @@ class Muzero(nn.Module):
                 for n in reversed(history):
                     n.countVisits += 1
                     n.totalValue += value
+                    self.scaler.update_val(n.get_value())
                     value = n.reward + self.config["mcts_discount_value"]*value
 
             policy = [n.countVisits for n in root.children.values()]
@@ -124,13 +126,19 @@ class Muzero(nn.Module):
         s = self.h(batch[0]["obs"])
         loss1, loss2 = nn.BCEWithLogitsLoss(), nn.MSELoss()
         policyLoss, valueLoss, rewardLoss = (0, 0, 0)
-        for b in batch:
+        consistencyLoss = 0
+        for i, b in enumerate(batch):
+            if i != 0:
+                with torch.no_grad():
+                    sp = self.h(b["obs"])
+                consistencyLoss += float(ut.consist_loss_func(
+                    s.reshape(1, -1), sp.reshape(1, -1)))
             s, r = self.dynamics_net(s, b["act"])
             p, v = self.f(s)
             policyLoss += loss1(p, b["pol"])
             valueLoss += loss2(v.squeeze(), b["val"])
             rewardLoss += loss2(r.squeeze(), b["rew"])
-        totalLoss = policyLoss + valueLoss + rewardLoss
+        totalLoss = policyLoss + valueLoss + rewardLoss + consistencyLoss
         self.optimizer.zero_grad()
         totalLoss.backward()
         self.optimizer.step()
