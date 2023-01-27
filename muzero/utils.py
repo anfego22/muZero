@@ -42,3 +42,12 @@ class MinMaxReward(object):
         if self.minQ != self.maxQ:
             return (val - self.minQ) / (self.maxQ - self.minQ)
         return val
+
+
+def consist_loss_func(f1, f2):
+    """Consistency loss function: similarity loss
+    Parameters
+    """
+    f1 = F.normalize(f1, p=2., dim=-1, eps=1e-5)
+    f2 = F.normalize(f2, p=2., dim=-1, eps=1e-5)
+    return -(f1 * f2).sum(dim=1)

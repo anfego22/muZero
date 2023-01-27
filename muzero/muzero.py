@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn.functional import cosine_similarity
 from torch.optim import Adam
 from muzero.models import Representation, Dynamics, Prediction
 import muzero.utils as ut
@@ -122,13 +123,19 @@ class Muzero(nn.Module):
         s = self.h(batch[0]["obs"])
         loss1, loss2 = nn.BCEWithLogitsLoss(), nn.MSELoss()
         policyLoss, valueLoss, rewardLoss = (0, 0, 0)
-        for b in batch:
+        consistencyLoss = 0
+        for i, b in enumerate(batch):
+            if i != 0:
+                with torch.no_grad():
+                    sp = self.h(b["obs"])
+                consistencyLoss += float(ut.consist_loss_func(
+                    s.reshape(1, -1), sp.reshape(1, -1)))
             s, r = self.dynamics_net(s, b["act"])
             p, v = self.f(s)
             policyLoss += loss1(p, b["pol"])
             valueLoss += loss2(v.squeeze(), b["val"])
             rewardLoss += loss2(r.squeeze(), b["rew"])
-        totalLoss = policyLoss + valueLoss + rewardLoss
+        totalLoss = policyLoss + valueLoss + rewardLoss + consistencyLoss
         self.optimizer.zero_grad()
         totalLoss.backward()
         self.optimizer.step()
