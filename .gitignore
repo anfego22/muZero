@@ -3,3 +3,4 @@ __pycache__
 .pytest_*
 .vscode
 muzero.egg-info
+assets/*
