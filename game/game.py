@@ -22,11 +22,14 @@ MUZERO_DEFAULT = {
     "root_dirichlet_alpha": 0.25,
     "mcts_max_depth": ROLLOUT_STEPS * 2,
     "mcts_discount_value": 0.8,
-    "mcts_simulations": 50,
+    "mcts_simulations": 25,
     "pUCT_score_c1": 1.25,
     "pUCT_score_c2": 19652,
-    "adam_weight_decay": 1e-5,
-    "adam_lr": 0.01,
+    "weight_decay": 1e-4,
+    "momentum": 0.9,
+    "lr_init": 0.05,
+    "lr_decay_rate": 0.1,
+    "lr_decay_steps": 350,
     "random_action_threshold": 0.8,
 }
 

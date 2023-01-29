@@ -33,8 +33,12 @@ class Muzero(nn.Module):
         self.f = Prediction(
             self.predInp, config["prediction_hidden_size"] + [config["action_space"]], (self.support_size*2 + 1))
         self.to(self.device)
-        self.optimizer = Adam(self.parameters(
-        ),  lr=config["adam_lr"], weight_decay=config["adam_weight_decay"])
+        self.optimizer = torch.optim.SGD(
+            self.parameters(),
+            lr=config["lr_init"],
+            momentum=config["momentum"],
+            weight_decay=config["weight_decay"],
+        )
         self.mcts_simulations = config["mcts_simulations"]
         self.scaler = ut.MinMaxReward()
         self.eval()
