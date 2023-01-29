@@ -14,6 +14,7 @@ class Muzero(nn.Module):
         super().__init__()
         self.config = config
         self.device = 'cuda'
+        self.support_size = config["support_size"]
         self.repInp = (config["observation_dim"][0] + 1) * \
             config["observation_history"]
         self.h = Representation(
@@ -25,11 +26,12 @@ class Muzero(nn.Module):
             config["observation_dim"][2] // (2 **
                                              len(config["representation_outputs"]))
         ]
-        self.g = Dynamics(self.dynInp, config["dynamic_hidden_size"])
+        self.g = Dynamics(
+            self.dynInp, config["dynamic_hidden_size"] + [self.support_size*2 + 1])
         self.predInp = [config["representation_outputs"]
                         [-1], self.dynInp[1], self.dynInp[2]]
         self.f = Prediction(
-            self.predInp, config["prediction_hidden_size"] + [config["action_space"]])
+            self.predInp, config["prediction_hidden_size"] + [config["action_space"]], (self.support_size*2 + 1))
         self.to(self.device)
         self.optimizer = Adam(self.parameters(
         ),  lr=config["adam_lr"], weight_decay=config["adam_weight_decay"])
@@ -95,9 +97,11 @@ class Muzero(nn.Module):
                 parent = history[-2]
                 node.hiddenState, reward = self.dynamics_net(
                     parent.hiddenState, act)
-                node.reward = float(reward)
+                node.reward = ut.support_to_scalar(
+                    reward, self.support_size)
                 probs, value = self.f(node.hiddenState)
-                value = float(value)
+                value = ut.support_to_scalar(
+                    value, self.support_size)
 
                 for i, p in enumerate(probs[0]):
                     p = p / sum(probs[0])
@@ -126,7 +130,7 @@ class Muzero(nn.Module):
                         }
         """
         s = self.h(batch[0]["obs"])
-        loss1, loss2 = nn.BCEWithLogitsLoss(), nn.MSELoss()
+        lossF = nn.BCEWithLogitsLoss()
         policyLoss, valueLoss, rewardLoss = (0, 0, 0)
         consistencyLoss = 0
         for i, b in enumerate(batch):
@@ -137,9 +141,13 @@ class Muzero(nn.Module):
                     s.reshape(1, -1), sp.reshape(1, -1)))
             s, r = self.dynamics_net(s, b["act"])
             p, v = self.f(s)
-            policyLoss += loss1(p, b["pol"])
-            valueLoss += loss2(v.squeeze(), b["val"])
-            rewardLoss += loss2(r.squeeze(), b["rew"])
+            value = ut.scalar_to_support(
+                b["val"][:, None], self.config["support_size"])
+            reward = ut.scalar_to_support(
+                b["rew"][:, None], self.config["support_size"])
+            policyLoss += lossF(p, b["pol"])
+            valueLoss += lossF(v, value.squeeze(1))
+            rewardLoss += lossF(r, reward.squeeze(1))
         totalLoss = policyLoss + valueLoss + rewardLoss + consistencyLoss
         self.optimizer.zero_grad()
         totalLoss.backward()

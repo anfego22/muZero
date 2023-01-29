@@ -62,7 +62,6 @@ class Dynamics(nn.Module):
     def __init__(self, inpDim: list, linOut: list = [1]):
         super().__init__()
         channel = inpDim[0]
-        linOut += [1]
         initDim = prod([inpDim[0] - 1] + inpDim[1:])
         layer = [BasicBlock(channel) for _ in range(2)]
         layer += [nn.Conv2d(channel, channel - 1, 3, stride=1, padding=1)]
@@ -81,7 +80,7 @@ class Dynamics(nn.Module):
 
 
 class Prediction(nn.Module):
-    def __init__(self, inpDim: list, linOut: list[int]):
+    def __init__(self, inpDim: list, linOut: list[int], supportSize: int = 1):
         super().__init__()
         channel = inpDim[0]
         initDim = prod(inpDim)
@@ -93,7 +92,7 @@ class Prediction(nn.Module):
                 initDim = out
         self.layer = nn.Sequential(*layer)
         self.outLayer = nn.ModuleList([
-            nn.Linear(initDim, linOut[-1]), nn.Linear(initDim, 1)])
+            nn.Linear(initDim, linOut[-1]), nn.Linear(initDim, supportSize)])
 
     def forward(self, x) -> tuple:
         out = self.layer(x)
