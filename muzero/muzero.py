@@ -78,6 +78,7 @@ class Muzero(nn.Module):
                 [self.config["root_dirichlet_alpha"]] * self.config["action_space"])
             frac = self.config["mcts_root_exploration"]
             for i, (n, p) in enumerate(zip(noise, probs[0])):
+                p = p / sum(probs[0])
                 root.children[i] = ut.Node(p*(1-frac) + n*frac)
 
             for j in range(nSimul):
@@ -99,6 +100,7 @@ class Muzero(nn.Module):
                 value = float(value)
 
                 for i, p in enumerate(probs[0]):
+                    p = p / sum(probs[0])
                     node.children[i] = ut.Node(p)
 
                 for n in reversed(history):
