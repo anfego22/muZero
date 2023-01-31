@@ -22,7 +22,7 @@ MUZERO_DEFAULT = {
     "root_dirichlet_alpha": 0.25,
     "mcts_max_depth": ROLLOUT_STEPS * 2,
     "mcts_discount_value": 0.8,
-    "mcts_simulations": 25,
+    "mcts_simulations": 50,
     "pUCT_score_c1": 1.25,
     "pUCT_score_c2": 19652,
     "weight_decay": 1e-4,
@@ -43,6 +43,7 @@ class Game(object):
         self.agent_file = agent_file
         self.buffer_file = buffer_file
         MUZERO_DEFAULT["action_space"] = env.action_space.n
+        MUZERO_DEFAULT["observation_history"] = prev_obs
         self.load_assets(buffer_size, td_steps)
         obsShape = self.agent.config["observation_dim"][1:]
         self.env = gym.wrappers.ResizeObservation(env, obsShape)

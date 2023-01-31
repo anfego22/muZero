@@ -144,14 +144,21 @@ class Muzero(nn.Module):
                 consistencyLoss += float(ut.consist_loss_func(
                     s.reshape(1, -1), sp.reshape(1, -1)))
             s, r = self.dynamics_net(s, b["act"])
+            s.register_hook(lambda grad: grad * .5)
             p, v = self.f(s)
             value = ut.scalar_to_support(
                 b["val"][:, None], self.config["support_size"])
             reward = ut.scalar_to_support(
                 b["rew"][:, None], self.config["support_size"])
-            policyLoss += lossF(p, b["pol"])
-            valueLoss += lossF(v, value.squeeze(1))
-            rewardLoss += lossF(r, reward.squeeze(1))
+            currentPolicyLoss = lossF(p, b["pol"])
+            currentValueLoss = lossF(v, value.squeeze(1))
+            currentRewardLoss = lossF(r, reward.squeeze(1))
+            currentPolicyLoss.register_hook(lambda grad: grad / len(batch))
+            currentValueLoss.register_hook(lambda grad: grad / len(batch))
+            currentRewardLoss.register_hook(lambda grad: grad / len(batch))
+            policyLoss += currentPolicyLoss
+            valueLoss += currentValueLoss
+            rewardLoss += currentRewardLoss
         totalLoss = policyLoss + valueLoss + rewardLoss + consistencyLoss
         self.optimizer.zero_grad()
         totalLoss.backward()
