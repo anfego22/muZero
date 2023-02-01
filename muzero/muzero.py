@@ -80,15 +80,16 @@ class Muzero(nn.Module):
             root = ut.Node(0)
             root.hiddenState = self.h(obs)
             probs, _ = self.f(root.hiddenState)
+            probs = nn.Softmax(dim=1)(probs)
             noise = dirichlet(
                 [self.config["root_dirichlet_alpha"]] * self.config["action_space"])
             frac = self.config["mcts_root_exploration"]
             for i, (n, p) in enumerate(zip(noise, probs[0])):
-                p = p / sum(probs[0])
                 root.children[i] = ut.Node(p*(1-frac) + n*frac)
 
             for j in range(nSimul):
                 history = [root]
+                history_act = []
                 node = history[0]
                 depth = 0
                 # While node is expanded, traverse the tree until reach a leaf node and expanded.
@@ -96,6 +97,7 @@ class Muzero(nn.Module):
                 while len(node.children) > 0 and depth < self.config["mcts_max_depth"]:
                     act, node = self.select_action(node)
                     history.append(node)
+                    history_act.append(act)
                     depth += 1
 
                 parent = history[-2]
@@ -104,11 +106,11 @@ class Muzero(nn.Module):
                 node.reward = ut.support_to_scalar(
                     reward, self.support_size)
                 probs, value = self.f(node.hiddenState)
+                probs = nn.Softmax(dim=1)(probs)
                 value = ut.support_to_scalar(
                     value, self.support_size)
 
                 for i, p in enumerate(probs[0]):
-                    p = p / sum(probs[0])
                     node.children[i] = ut.Node(p)
 
                 for n in reversed(history):
@@ -134,7 +136,6 @@ class Muzero(nn.Module):
                         }
         """
         s = self.h(batch[0]["obs"])
-        lossF = nn.BCEWithLogitsLoss()
         policyLoss, valueLoss, rewardLoss = (0, 0, 0)
         consistencyLoss = 0
         for i, b in enumerate(batch):
@@ -150,15 +151,15 @@ class Muzero(nn.Module):
                 b["val"][:, None], self.config["support_size"])
             reward = ut.scalar_to_support(
                 b["rew"][:, None], self.config["support_size"])
-            currentPolicyLoss = lossF(p, b["pol"])
-            currentValueLoss = lossF(v, value.squeeze(1))
-            currentRewardLoss = lossF(r, reward.squeeze(1))
+            currentValueLoss = (-value * torch.nn.LogSoftmax(dim=1)(v)).sum(1)
+            currentRewardLoss = (-reward * nn.LogSoftmax(dim=1)(r)).sum(1)
+            currentPolicyLoss = (-b["pol"] * nn.LogSoftmax(dim=1)(p)).sum(1)
             currentPolicyLoss.register_hook(lambda grad: grad / len(batch))
             currentValueLoss.register_hook(lambda grad: grad / len(batch))
             currentRewardLoss.register_hook(lambda grad: grad / len(batch))
-            policyLoss += currentPolicyLoss
-            valueLoss += currentValueLoss
-            rewardLoss += currentRewardLoss
+            policyLoss += currentPolicyLoss.mean()
+            valueLoss += currentValueLoss.mean()
+            rewardLoss += currentRewardLoss.mean()
         totalLoss = policyLoss + valueLoss + rewardLoss + consistencyLoss
         self.optimizer.zero_grad()
         totalLoss.backward()
@@ -173,7 +174,7 @@ class Muzero(nn.Module):
         policy, val = self.mcst(obs, nSimul)
         # act = [i for i, v in enumerate(policy) if v == max(policy)][0]
         act = choice(self.config["action_space"],
-                     p=policy.numpy() / policy.numpy().sum())
+                     p=policy.numpy())
         if uniform() < self.config["random_action_threshold"]:
             act = choice(self.config["action_space"])
             # If action was taken by random, policy should be modify?
