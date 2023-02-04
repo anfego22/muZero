@@ -33,6 +33,11 @@ parser.add_argument(
     '-play_train', action=argparse.BooleanOptionalAction, default=False)
 args = parser.parse_args()
 
+if args.render:
+    env = gym.make("Pong-v4", render_mode="human", frameskip=args.frameskip)
+else:
+    env = gym.make("Pong-v4", frameskip=args.frameskip)
+
 agent_config = {
     "observation_dim": [3, 96, 96],
     "observation_history": args.prev_obs,
@@ -40,6 +45,7 @@ agent_config = {
     "representation_outputs": [4, 4, 2],
     "dynamic_hidden_size": [18, 20, 8],
     "support_size": 21,
+    "action_space": env.action_space.n,
     "prediction_hidden_size": [8, 11, 6],
     "mcts_root_exploration": args.root_noise,
     "root_dirichlet_alpha": 0.25,
@@ -56,11 +62,6 @@ agent_config = {
     "random_action_threshold": args.rand_act,
     "batch_size": args.batch_size,
 }
-
-if args.render:
-    env = gym.make("Pong-v4", render_mode="human", frameskip=args.frameskip)
-else:
-    env = gym.make("Pong-v4", frameskip=args.frameskip)
 
 g = Game(env, agent_config, args.agent_file,
          args.buffer_file, args.buffer_size)
