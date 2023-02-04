@@ -8,50 +8,24 @@ import numpy as np
 import pickle
 from datetime import datetime
 
-ROLLOUT_STEPS = 6
 DEVICE = 'cuda'
-
-MUZERO_DEFAULT = {
-    "observation_dim": [3, 96, 96],
-    "observation_history": 8,
-    "representation_outputs": [4, 4, 2],
-    "dynamic_hidden_size": [18, 20, 8],
-    "support_size": 21,
-    "prediction_hidden_size": [8, 11, 6],
-    "mcts_root_exploration": 0.8,
-    "root_dirichlet_alpha": 0.25,
-    "mcts_max_depth": ROLLOUT_STEPS * 2,
-    "mcts_discount_value": 0.8,
-    "mcts_simulations": 50,
-    "pUCT_score_c1": 1.25,
-    "pUCT_score_c2": 19652,
-    "weight_decay": 1e-4,
-    "momentum": 0.9,
-    "lr_init": 0.05,
-    "lr_decay_rate": 0.1,
-    "lr_decay_steps": 350,
-    "random_action_threshold": 0.8,
-}
 
 
 class Game(object):
     RANDOM_ACTION_DECAY = 0.995
 
-    def __init__(self, env, random_action: float = 0.8,
-                 agent_file: str = "muzero", buffer_file: str = "buffer",
-                 buffer_size: int = 10, td_steps: int = 3, root_noise: float = 0.8, prev_obs: int = 32):
+    def __init__(self, env, agent_config: dict, agent_file: str = "muzero",
+                 buffer_file: str = "buffer", buffer_size: int = 10):
         self.agent_file = agent_file
         self.buffer_file = buffer_file
-        MUZERO_DEFAULT["action_space"] = env.action_space.n
-        MUZERO_DEFAULT["observation_history"] = prev_obs
-        self.load_assets(buffer_size, td_steps)
+        self.agent_config = agent_config
+        self.load_assets(buffer_size)
         obsShape = self.agent.config["observation_dim"][1:]
         self.env = gym.wrappers.ResizeObservation(env, obsShape)
         self.env.reset()
         self.done = False
         self.stackObs = []
-        self.agent.config["random_action_threshold"] = random_action
-        self.agent.config["mcts_root_exploration"] = root_noise
+        self.agent.config = agent_config
         self.device = DEVICE
 
     def make_image(self) -> torch.Tensor:
@@ -75,7 +49,7 @@ class Game(object):
         self.done = False
         self.stackObs = []
 
-    def load_assets(self, buffer_size: int, td_steps: int):
+    def load_assets(self, buffer_size: int):
         start_t = datetime.now()
         print("Loading assets")
         try:
@@ -83,16 +57,22 @@ class Game(object):
                 self.agent = pickle.load(f)
         except:
             print("No file found. Creating default muzero")
-            self.agent = Muzero(MUZERO_DEFAULT)
+            self.agent = Muzero(self.agent_config)
         pT = sum([p.numel() for p in self.agent.parameters()])
         print(f"Total parameters {pT}")
         try:
             with open("assets/" + self.buffer_file, "rb") as f:
                 self.buffer = pickle.load(f)
         except:
-            self.buffer = ReplayBuffer(td_steps, buffer_size)
+            self.buffer = ReplayBuffer(buffer_size)
         end_t = datetime.now() - start_t
         print(f"Load assets at: {end_t.total_seconds()}")
+
+    def make_mc_returns(self, buffer: ReplayBuffer, gameId: str) -> None:
+        v = 0
+        for step in reversed(buffer.history[gameId]):
+            step["val"] = step["val"] + v
+            v = step["rew"] + self.agent.config["mcts_discount_value"]*v
 
     def play_game(self):
         gameId = uuid4().__str__()[:6]
@@ -108,12 +88,13 @@ class Game(object):
             obs, reward, self.done, _, _ = self.env.step(res["act"])
             step = {"obs": self.stackObs[-1][0],
                     "act": res["act"], "rew": reward, "pol": res["pol"],
-                    "val": res["val"]}
+                    "val": res["val"], "pri": 1}
             self.buffer.add(step, gameId)
             self.stackObs.pop(0)
             self.stackObs.append((obs, res["act"]))
 
         end_t = datetime.now() - start_t
+        self.make_mc_returns(self.buffer, gameId)
         print(f"game {gameId} finish at: {end_t.total_seconds()}")
         start_t = datetime.now()
         with open("assets/" + self.buffer_file, "wb") as f:
@@ -130,9 +111,7 @@ class Game(object):
 
     def train_agent(self, epoch: int = 500):
         for i in range(epoch):
-            prev_obs = self.agent.config["observation_history"]
-            b = self.buffer.sample_batch(ROLLOUT_STEPS, prev_obs=prev_obs)
-            loss, pL, rL, vL = self.agent.train_batch(b)
+            loss, pL, rL, vL = self.agent.train_batch(self.buffer)
             if i != 0 and i % 10 == 0:
                 print(
                     f"Total loss: {loss} policy loss: {pL} reward loss {rL} value loss {vL} step: {i}")

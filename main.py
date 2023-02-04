@@ -49,7 +49,7 @@ agent_config = {
     "prediction_hidden_size": [8, 11, 6],
     "mcts_root_exploration": args.root_noise,
     "root_dirichlet_alpha": 0.25,
-    "mcts_max_depth": args.rollout_step * 2,
+    "mcts_max_depth": args.rollout_steps * 2,
     "mcts_discount_value": 0.8,
     "mcts_simulations": args.mcts_simulations,
     "pUCT_score_c1": 1.25,
