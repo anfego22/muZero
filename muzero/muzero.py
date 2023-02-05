@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.nn.functional import cosine_similarity
-from torch.optim import Adam
+from muzero.buffer import ReplayBuffer
 from muzero.models import Representation, Dynamics, Prediction
 import muzero.utils as ut
 from numpy.random import choice, uniform, dirichlet
@@ -13,6 +12,7 @@ class Muzero(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
+        self.priority_epsilon = 0.001
         self.device = 'cuda'
         self.support_size = config["support_size"]
         self.repInp = (config["observation_dim"][0] + 1) * \
@@ -124,7 +124,7 @@ class Muzero(nn.Module):
             policy = torch.Tensor([p / norm for p in policy])
             return policy, root.get_value()
 
-    def train_batch(self, batch: dict) -> None:
+    def train_batch(self, buffer: ReplayBuffer) -> None:
         """Train the model.
 
         batch: A list of dicts, each dict represent a batch of action in step k
@@ -135,9 +135,13 @@ class Muzero(nn.Module):
                         policy  : torch.Tensor size(batchSize, actionSpace)
                         }
         """
+        batch = buffer.sample_batch(self.config["rollout_steps"],
+                                    self.config["batch_size"],
+                                    self.config["observation_history"])
         s = self.h(batch[0]["obs"])
         policyLoss, valueLoss, rewardLoss = (0, 0, 0)
-        consistencyLoss = 0
+        consistencyLoss, totalLoss = (0, 0)
+        priorities = [[]]*len(batch)
         for i, b in enumerate(batch):
             if i != 0:
                 with torch.no_grad():
@@ -147,19 +151,25 @@ class Muzero(nn.Module):
             s, r = self.dynamics_net(s, b["act"])
             s.register_hook(lambda grad: grad * .5)
             p, v = self.f(s)
+            vS = ut.support_to_scalar(v, self.support_size).squeeze()
+            priorities[i] = abs(vS - b["val"]) + self.priority_epsilon
             value = ut.scalar_to_support(
                 b["val"][:, None], self.config["support_size"])
             reward = ut.scalar_to_support(
                 b["rew"][:, None], self.config["support_size"])
-            currentValueLoss = (-value * torch.nn.LogSoftmax(dim=1)(v)).sum(1)
-            currentRewardLoss = (-reward * nn.LogSoftmax(dim=1)(r)).sum(1)
-            currentPolicyLoss = (-b["pol"] * nn.LogSoftmax(dim=1)(p)).sum(1)
+            currentValueLoss = (-value.squeeze() *
+                                torch.nn.LogSoftmax(dim=1)(v)).sum(1) * b["pri"]
+            currentRewardLoss = (-reward.squeeze() * nn.LogSoftmax(dim=1)
+                                 (r)).sum(1) * b["pri"]
+            currentPolicyLoss = (-b["pol"] *
+                                 nn.LogSoftmax(dim=1)(p)).sum(1) * b["pri"]
             currentPolicyLoss.register_hook(lambda grad: grad / len(batch))
             currentValueLoss.register_hook(lambda grad: grad / len(batch))
             currentRewardLoss.register_hook(lambda grad: grad / len(batch))
             policyLoss += currentPolicyLoss.mean()
             valueLoss += currentValueLoss.mean()
             rewardLoss += currentRewardLoss.mean()
+        buffer.update_priorities(batch, priorities)
         totalLoss = policyLoss + valueLoss + rewardLoss + consistencyLoss
         self.optimizer.zero_grad()
         totalLoss.backward()
