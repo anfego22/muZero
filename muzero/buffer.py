@@ -8,6 +8,7 @@ class ReplayBuffer(object):
     def __init__(self, maxGames: int = 10, discount: float = 0.995, device: str = 'cuda'):
         """This class store all information relevant to replay a game."""
         self.history = {}
+        self.game_priorities = {}
         self.discount = discount
         self.maxGames = maxGames
         self.device = device
@@ -27,9 +28,11 @@ class ReplayBuffer(object):
             self.history[game].append(step)
         else:
             self.history[game] = [step]
+            self.game_priorities[game] = 1
         if len(self.history.keys()) > self.maxGames:
             k = list(self.history.keys()).pop(0)
             self.history.pop(k)
+            self.game_priorities.pop(k)
 
     def sample_batch(self, steps: int, batchSize: int = 32, prev_obs: int = 32) -> dict[str, torch.Tensor]:
         """Sample randomly a batch from a game.
@@ -38,7 +41,9 @@ class ReplayBuffer(object):
         batchSize: Number of observations to stack.
         game:      The number of the game to sample the sequence of observations.
         """
-        g = choice(list(self.history.keys()))
+        gamePriorities = np.array([p for p in self.game_priorities.values()])
+        g = choice(list(self.history.keys()),
+                   p=gamePriorities / sum(gamePriorities))
         selGame = self.history[g]
         priorities = np.array([p["pri"]
                               for p in selGame][prev_obs:(-steps-1)])
@@ -46,10 +51,11 @@ class ReplayBuffer(object):
                      p=priorities / sum(priorities)) + prev_obs
         batch = []
         for s in range(steps + 1):
+            pri = torch.Tensor([selGame[p + s]["pri"] for p in pos])
             batch.append({
                 "gameId": g,
                 "pos": [p+s for p in pos],
-                "pri": torch.Tensor([selGame[p + s]["pri"] for p in pos]).to(self.device),
+                "pri": (pri / pri.sum()).to(self.device),
                 "obs": torch.concat([self.make_obs(selGame, p+s, prev_obs) for p in pos], 0).to(self.device),
                 "act": [selGame[p+s]["act"] for p in pos],
                 "rew": torch.Tensor([selGame[p+s]["rew"] for p in pos]).to(self.device),
@@ -61,10 +67,13 @@ class ReplayBuffer(object):
     def update_priorities(self, batch: dict, priorities: list[torch.Tensor]) -> None:
         """Update priorities in the batch."""
         g = batch[0]["gameId"]
+        maxPri = self.game_priorities[g]
         for j in range(len(batch)):
             b = batch[j]
             for priority, idx in zip(priorities[j], b["pos"]):
+                maxPri = max(float(priority), maxPri)
                 self.history[g][idx]["pri"] = float(priority)
+        self.game_priorities[g] = maxPri
 
     # TODO: Left the option to use tdstep value for estimation
 

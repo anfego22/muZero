@@ -138,6 +138,8 @@ class Muzero(nn.Module):
         batch = buffer.sample_batch(self.config["rollout_steps"],
                                     self.config["batch_size"],
                                     self.config["observation_history"])
+        gameId = batch[0]["gameId"]
+        N = len(buffer.history[gameId])
         s = self.h(batch[0]["obs"])
         policyLoss, valueLoss, rewardLoss = (0, 0, 0)
         consistencyLoss, totalLoss = (0, 0)
@@ -158,11 +160,11 @@ class Muzero(nn.Module):
             reward = ut.scalar_to_support(
                 b["rew"][:, None], self.config["support_size"])
             currentValueLoss = (-value.squeeze() *
-                                torch.nn.LogSoftmax(dim=1)(v)).sum(1) * b["pri"]
+                                torch.nn.LogSoftmax(dim=1)(v)).sum(1) * (1/(N*b["pri"]))
             currentRewardLoss = (-reward.squeeze() * nn.LogSoftmax(dim=1)
-                                 (r)).sum(1) * b["pri"]
+                                 (r)).sum(1) * (1/(N*b["pri"]))
             currentPolicyLoss = (-b["pol"] *
-                                 nn.LogSoftmax(dim=1)(p)).sum(1) * b["pri"]
+                                 nn.LogSoftmax(dim=1)(p)).sum(1) * (1/(N*b["pri"]))
             currentPolicyLoss.register_hook(lambda grad: grad / len(batch))
             currentValueLoss.register_hook(lambda grad: grad / len(batch))
             currentRewardLoss.register_hook(lambda grad: grad / len(batch))
