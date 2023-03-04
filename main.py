@@ -1,6 +1,7 @@
 import argparse
 import gym
 from game.game import Game
+import pickle
 
 ROLLOUT_STEPS = 6
 RANDOM_ACTION_DECAY = 0.995
@@ -62,9 +63,17 @@ agent_config = {
     "random_action_threshold": args.rand_act,
     "batch_size": args.batch_size,
 }
+try:
+    with open("assets/" + args.agent_file, "rb") as f:
+        agent = pickle.load(f)
+    agent.config["random_action_threshold"] = args.rand_act
+    agent.config["mcts_simulations"] = args.mcts_simulations
 
-g = Game(env, agent_config, args.agent_file,
-         args.buffer_file, args.buffer_size)
+    g = Game(env, agent.config, args.agent_file,
+             args.buffer_file, args.buffer_size)
+except:
+    g = Game(env, agent_config, args.agent_file,
+             args.buffer_file, args.buffer_size)
 if args.train:
     g.train_agent(args.n_epoch)
 if args.play:
